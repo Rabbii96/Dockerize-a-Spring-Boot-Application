@@ -1,38 +1,20 @@
-# Build stage
+# ---- Build ----
 FROM maven:3-eclipse-temurin-17 AS build
 WORKDIR /app
-
-# Copy only the files needed for dependency resolution (faster builds)
 COPY pom.xml .
-# Download dependencies
-RUN mvn dependency:go-offline
-
-# Copy source code
+RUN mvn -B -q -DskipTests dependency:go-offline
 COPY src ./src
+RUN mvn -B -DskipTests package
 
-# Build the application
-RUN mvn clean package -DskipTests
-
-# Production stage
+# ---- Run ----
 FROM eclipse-temurin:17-jre-alpine
-
-# Set timezone
-ENV TZ=UTC
-
-# Create a non-root user
-RUN addgroup -S spring && adduser -S spring -G spring
-USER spring:spring
-
 WORKDIR /app
+COPY --from=build /app/target/*.jar /app/app.jar
 
-# Copy the JAR file from the build stage
-COPY --from=build /app/target/*.jar app.jar
+# (গুরুত্বপূর্ণ) কোনো JAVA_OPTS/TOOL_OPTIONS সেট কোরো না
+# ENV JAVA_TOOL_OPTIONS=""
+# ENV JAVA_OPTS=""
 
-# Expose the application port
 EXPOSE 8080
+ENTRYPOINT ["java","-jar","/app/app.jar"]
 
-# Set JVM options for production
-ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:MaxRAMPercentage=75.0 -XX:+UseContainerSupport -XX:+IdleTuningCompactOnIdle -XX:+IdleTuningGcOnIdle"
-
-# Run the application
-ENTRYPOINT exec java $JAVA_OPTS -jar app.jar
